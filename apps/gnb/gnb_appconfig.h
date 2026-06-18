@@ -28,6 +28,10 @@ struct metrics_appconfig {
   app_services::metrics_appconfig         metrics_service_cfg;
   app_services::executor_metrics_config   executors_metrics_cfg;
   bool                                    autostart_stdout_metrics = false;
+  //ISAC TAP begin
+  bool                                    isac_stream              = false;
+  uint16_t                                isac_port                = 5556;
+  //ISAC TAP END
 };
 
 /// Monolithic gnb application configuration.

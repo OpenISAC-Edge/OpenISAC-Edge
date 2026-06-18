@@ -14,6 +14,9 @@
 #include "apps/services/cmdline/stdout_metrics_command.h"
 #include "apps/services/metrics/metrics_manager.h"
 #include "apps/services/metrics/metrics_notifier_proxy.h"
+//ISAC TAP begin
+#include "apps/services/isac/isac_zmq_sink.h"
+//ISAC TAP END
 #include "apps/services/remote_control/remote_server.h"
 #include "apps/services/worker_manager/worker_manager.h"
 #include "apps/units/flexible_o_du/flexible_o_du_application_unit.h"
@@ -379,6 +382,18 @@ int main(int argc, char** argv)
   worker_manager_cfg.exec_metrics_channel_registry = exec_metrics_service.channel_registry;
   worker_manager workers{worker_manager_cfg};
 
+  //ISAC TAP begin
+  // Construct and register the ISAC channel-estimate tap (ZMQ PUB). Bind IP reuses remote_control.bind_addr.
+  std::unique_ptr<isac::zmq_sink> isac_tap_sink;
+  if (gnb_cfg.metrics_cfg.isac_stream) {
+    const std::string isac_ep =
+        fmt::format("tcp://{}:{}", gnb_cfg.remote_control_config.bind_addr, gnb_cfg.metrics_cfg.isac_port);
+    fmt::println("ISAC Tap at {}", isac_ep);
+    isac_tap_sink = std::make_unique<isac::zmq_sink>(isac_ep, workers.get_metrics_executor());
+    isac::register_sink(isac_tap_sink.get());
+  }
+  //ISAC TAP END
+
   // Create IO broker.
   const auto&                main_pool_cpu_mask = gnb_cfg.expert_execution_cfg.affinities.main_pool_cpu_cfg.mask;
   io_broker_config           io_broker_cfg(os_thread_realtime_priority::min() + 5, main_pool_cpu_mask);
@@ -637,6 +652,11 @@ int main(int argc, char** argv)
 
   // Stop O-CU-CP activity.
   o_cucp_obj.get_operation_controller().stop();
+
+  //ISAC TAP begin
+  // Stop feeding the ISAC tap (PHY is stopped above); queued sends already hold the publisher alive.
+  isac::register_sink(nullptr);
+  //ISAC TAP END
 
   // Stop gateway SCTP servers.
   f1c_gw->stop();

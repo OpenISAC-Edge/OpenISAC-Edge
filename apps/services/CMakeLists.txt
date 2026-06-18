@@ -13,6 +13,7 @@ add_subdirectory(cmdline)
 add_subdirectory(metrics)
 add_subdirectory(remote_control)
 add_subdirectory(worker_manager)
+add_subdirectory(isac)
 
 add_library(ocudu_app_services INTERFACE)
 target_link_libraries(ocudu_app_services INTERFACE

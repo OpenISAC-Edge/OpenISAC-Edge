@@ -35,6 +35,13 @@ bool ocudu::validate_appconfig(const gnb_appconfig& config)
     return false;
   }
 
+  //ISAC TAP begin
+  if (config.metrics_cfg.isac_stream && config.metrics_cfg.isac_port == 0) {
+    fmt::print("ISAC tap enabled (isac_stream) but isac_port is 0\n");
+    return false;
+  }
+  //ISAC TAP END
+
   return true;
 }
 

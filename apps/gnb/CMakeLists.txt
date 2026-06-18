@@ -29,6 +29,8 @@ target_link_libraries(gnb_base PRIVATE
         ocudu_o_cu_cp_app_unit
         ocudu_o_cu_up_app_unit
 )
+# ISAC TAP: link the ISAC ZMQ egress so gnb.cpp can construct/register the sink.
+target_link_libraries(gnb_base PUBLIC ocudu_isac)
 
 if (DPDK_FOUND)
     add_definitions(-DDPDK_FOUND)

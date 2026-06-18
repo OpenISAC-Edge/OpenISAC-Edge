@@ -62,6 +62,10 @@ void ocudu::fill_gnb_appconfig_in_yaml_schema(YAML::Node& node, const gnb_appcon
   app_services::fill_metrics_appconfig_in_yaml_schema(node, config.metrics_cfg.metrics_service_cfg);
   app_services::fill_app_exec_metrics_config_in_yaml_schema(node, config.metrics_cfg.executors_metrics_cfg);
   node["metrics"]["autostart_stdout_metrics"] = config.metrics_cfg.autostart_stdout_metrics;
+  //ISAC TAP begin
+  node["metrics"]["isac_stream"]              = config.metrics_cfg.isac_stream;
+  node["metrics"]["isac_port"]                = config.metrics_cfg.isac_port;
+  //ISAC TAP END
   app_services::fill_buffer_pool_config_in_yaml_schema(node, config.buffer_pool_config);
   fill_logger_appconfig_in_yaml_schema(node, config.log_cfg);
   fill_tracer_appconfig_in_yaml_schema(node, config.trace_cfg);

@@ -12,6 +12,9 @@
 #include "ocudu/phy/upper/channel_processors/pusch/pusch_codeword_buffer.h"
 #include "ocudu/phy/upper/channel_processors/pusch/pusch_decoder_buffer.h"
 #include "ocudu/phy/upper/unique_rx_buffer.h"
+//ISAC TAP begin
+#include "ocudu/phy/upper/isac/isac_tap.h"
+//ISAC TAP END
 #include "ocudu/ran/pusch/ulsch_info.h"
 #include "ocudu/ran/sch/sch_dmrs_power.h"
 #include "ocudu/ran/uci/uci_formatters.h"
@@ -211,6 +214,13 @@ void pusch_processor_impl::process_data(span<uint8_t>                          d
   // Extract channel state information.
   channel_state_information csi(csi_sinr_calc_method);
   est_results.get_channel_state_information(csi);
+
+  //ISAC TAP begin
+  // Export the uplink channel estimates to the ISAC stream (no-op unless a sink is registered).
+  if (isac::ce_sink* isac_sink = isac::get_sink()) {
+    isac_sink->on_ch_estimate(est_results, pdu);
+  }
+  //ISAC TAP END
 
   // Number of RB used by this transmission.
   unsigned nof_rb = pdu.freq_alloc.get_nof_rb();

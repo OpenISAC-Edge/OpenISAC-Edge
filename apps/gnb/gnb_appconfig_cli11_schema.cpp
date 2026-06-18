@@ -26,6 +26,11 @@ static void configure_cli11_metrics_args(CLI::App& app, metrics_appconfig& metri
   add_option(
       app, "--autostart_stdout_metrics", metrics_params.autostart_stdout_metrics, "Autostart stdout metrics reporting")
       ->capture_default_str();
+  //ISAC TAP begin
+  add_option(app, "--isac_stream", metrics_params.isac_stream, "Enable the ISAC channel-estimate ZMQ tap")
+      ->capture_default_str();
+  add_option(app, "--isac_port", metrics_params.isac_port, "ISAC tap ZMQ PUB port")->capture_default_str();
+  //ISAC TAP END
 }
 
 #ifdef DPDK_FOUND
