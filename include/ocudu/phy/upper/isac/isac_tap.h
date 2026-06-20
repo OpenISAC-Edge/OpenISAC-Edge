@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include "ocudu/adt/complex.h"
+#include "ocudu/adt/span.h"
 #include "ocudu/phy/upper/channel_processors/pusch/pusch_processor.h"
+#include "ocudu/ran/slot_point.h"
 
 namespace ocudu {
 
@@ -11,17 +14,20 @@ class dmrs_pusch_estimator_results;
 
 namespace isac {
 
-/// \brief Sink for uplink channel-estimate captures (the ISAC tap).
+/// \brief Sink for ISAC uplink captures (the tap).
 ///
-/// Implemented by the egress (ZMQ) layer. \ref on_ch_estimate is invoked on the real-time PHY thread, so
-/// implementations must keep the call cheap and defer any I/O to a relaxed executor.
+/// Implemented by the egress (ZMQ) layer. All callbacks are invoked on the real-time PHY thread, so
+/// implementations must keep them cheap and defer any I/O to a relaxed executor.
 class ce_sink
 {
 public:
   virtual ~ce_sink() = default;
 
-  /// Called once per processed PUSCH with the fully populated channel estimates and PDU context.
+  /// Channel estimate H[k] over the active subcarriers (KIND_CSI). One call per processed PUSCH.
   virtual void on_ch_estimate(const dmrs_pusch_estimator_results& est, const pusch_processor::pdu_t& pdu) = 0;
+
+  /// Equalized data symbols / constellation points for one OFDM symbol (KIND_EQ). One call per slot.
+  virtual void on_eq_symbols(span<const cf_t> eq_symbols, uint16_t rnti, slot_point slot) = 0;
 };
 
 /// Registers the process-global ISAC sink (pass nullptr to clear). Set once at startup.

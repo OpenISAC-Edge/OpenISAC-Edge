@@ -7,15 +7,16 @@
 #include "ocudu/adt/complex.h"
 #include "ocudu/adt/static_vector.h"
 #include "ocudu/ran/resource_block.h"
+#include <mutex>
 #include <string>
 
 namespace ocudu {
 namespace isac {
 
-/// One captured channel-estimate column: raw bf16 coefficients plus the frame header.
+/// One captured frame: header + complex64 payload (channel estimates or equalized symbols).
 struct capture {
-  frame_header                                hdr;
-  static_vector<cbf16_t, MAX_NOF_SUBCARRIERS> iq;
+  frame_header                            hdr;
+  static_vector<cf_t, MAX_NOF_SUBCARRIERS> iq;
 };
 
 /// \brief Owns a ZeroMQ PUB socket and serializes/sends captures best-effort.
@@ -33,11 +34,15 @@ public:
   bool is_open() const { return socket != nullptr; }
 
   /// Serializes the capture (header + complex64 payload) and sends it non-blocking (drops if no room).
+  ///
+  /// Thread-safe: callable directly from multiple PHY worker threads. A ZMQ PUB socket is not
+  /// thread-safe, so the actual zmq_send is serialized by an internal mutex.
   void publish(const capture& cap);
 
 private:
-  void* context = nullptr;
-  void* socket  = nullptr;
+  void*      context = nullptr;
+  void*      socket  = nullptr;
+  std::mutex send_mtx;
 };
 
 } // namespace isac

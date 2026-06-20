@@ -10,6 +10,9 @@
 #include "ocudu/phy/upper/signal_processors/pusch/dmrs_pusch_estimator.h"
 #include "ocudu/ran/dmrs/dmrs.h"
 #include "ocudu/ran/sch/modulation_scheme.h"
+//ISAC TAP begin
+#include "ocudu/ran/slot_point.h"
+//ISAC TAP END
 
 namespace ocudu {
 
@@ -31,6 +34,10 @@ public:
   struct configuration {
     /// Radio Network Temporary Identifier, see parameter \f$n_{RNTI}\f$ in TS38.211 Section 6.3.1.1.
     uint16_t rnti;
+    //ISAC TAP begin
+    /// Slot/numerology of this PUSCH (used by the ISAC equalized-symbol tap).
+    slot_point slot;
+    //ISAC TAP END
     /// Allocation CRB list: the entries set to true are used for transmission.
     crb_bitmap rb_mask;
     /// Modulation scheme used for transmission.

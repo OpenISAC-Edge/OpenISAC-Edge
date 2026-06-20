@@ -336,6 +336,9 @@ void pusch_processor_impl::process_data(span<uint8_t>                          d
 
   pusch_demodulator::configuration demod_config;
   demod_config.rnti                        = pdu.rnti;
+  //ISAC TAP begin
+  demod_config.slot = pdu.slot;
+  //ISAC TAP END
   demod_config.rb_mask                     = pdu.freq_alloc.get_crb_mask(pdu.bwp_start_rb, pdu.bwp_size_rb);
   demod_config.modulation                  = pdu.mcs_descr.modulation;
   demod_config.start_symbol_index          = pdu.start_symbol_index;

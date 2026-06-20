@@ -6,6 +6,8 @@
 add_library(ocudu_pusch_demodulator STATIC
         pusch_demodulator_impl.cpp
         demodulator_factories.cpp)
+# ISAC TAP: equalized-symbol tap calls into the ISAC sink registry.
+target_link_libraries(ocudu_pusch_demodulator ocudu_isac_tap)
 
 add_library(ocudu_pusch_processor STATIC
         processor_factories.cpp

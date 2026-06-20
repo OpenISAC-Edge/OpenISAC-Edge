@@ -9,6 +9,9 @@
 #include "ocudu/ocuduvec/simd.h"
 #include "ocudu/phy/upper/channel_processors/pusch/pusch_codeword_buffer.h"
 #include "ocudu/phy/upper/channel_processors/pusch/pusch_demodulator_notifier.h"
+//ISAC TAP begin
+#include "ocudu/phy/upper/isac/isac_tap.h"
+//ISAC TAP END
 
 #if defined(__SSE3__)
 #include <immintrin.h>
@@ -290,6 +293,12 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&              code
   float    total_noise_var_accumulate = 0.0;
   float    total_evm_accumulate       = 0.0;
 
+  //ISAC TAP begin
+  // Fetch the ISAC sink once; capture the first data symbol's equalized constellation per slot.
+  isac::ce_sink* isac_sink        = isac::get_sink();
+  bool           isac_eq_captured = false;
+  //ISAC TAP END
+
   // Process each OFDM symbol.
   for (unsigned i_symbol = config.start_symbol_index, i_symbol_end = config.start_symbol_index + config.nof_symbols;
        i_symbol != i_symbol_end;
@@ -351,6 +360,14 @@ void pusch_demodulator_impl::demodulate(pusch_codeword_buffer&              code
       precoder->deprecode_ofdm_symbol(eq_re, eq_re);
       precoder->deprecode_ofdm_symbol_noise(eq_noise_vars, eq_noise_vars);
     }
+
+    //ISAC TAP begin
+    // Export one OFDM symbol's equalized symbols (constellation points) to the ISAC stream.
+    if ((isac_sink != nullptr) && !isac_eq_captured) {
+      isac_sink->on_eq_symbols(span<const cf_t>(eq_re.data(), eq_re.size()), config.rnti, config.slot);
+      isac_eq_captured = true;
+    }
+    //ISAC TAP END
 
     // Estimate post equalization Signal-to-Interference-plus-Noise Ratio.
     if (compute_post_eq_sinr) {

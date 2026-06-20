@@ -61,11 +61,15 @@ void publisher::publish(const capture& cap)
 
   const frame_header& h = cap.hdr;
 
-  std::vector<uint8_t> buf;
-  buf.reserve(HEADER_BYTES + static_cast<size_t>(h.nof_sc) * 2 * sizeof(float));
+  // Reused per-thread so there is no heap allocation on the hot path after warm-up (capacity persists,
+  // clear() keeps it). Thread-local: each PHY worker has its own build buffer; only zmq_send is locked.
+  static thread_local std::vector<uint8_t> buf;
+  buf.clear();
+  buf.reserve(HEADER_BYTES + static_cast<size_t>(h.count) * 2 * sizeof(float));
 
   append_le(buf, h.magic);
   append_le(buf, h.version);
+  append_le(buf, h.kind);
   append_le(buf, h.scs_khz);
   append_le(buf, h.slot);
   append_le(buf, h.rnti);
@@ -73,14 +77,17 @@ void publisher::publish(const capture& cap)
   append_le(buf, h.rx_port);
   append_le(buf, h.tx_layer);
   append_le(buf, h.rb_start);
-  append_le(buf, h.nof_sc);
+  append_le(buf, h.count);
 
-  for (unsigned k = 0; k != h.nof_sc; ++k) {
-    cf_t c = to_cf(cap.iq[k]);
-    append_le(buf, c.real());
-    append_le(buf, c.imag());
+  for (unsigned k = 0; k != h.count; ++k) {
+    append_le(buf, cap.iq[k].real());
+    append_le(buf, cap.iq[k].imag());
   }
 
   // Best-effort, non-blocking: drops the frame if the send queue is full or there is no subscriber.
-  (void)zmq_send(socket, buf.data(), buf.size(), ZMQ_DONTWAIT);
+  // Serialize socket access (PUB is not thread-safe; taps may call from concurrent PHY threads).
+  {
+    std::lock_guard<std::mutex> lock(send_mtx);
+    (void)zmq_send(socket, buf.data(), buf.size(), ZMQ_DONTWAIT);
+  }
 }

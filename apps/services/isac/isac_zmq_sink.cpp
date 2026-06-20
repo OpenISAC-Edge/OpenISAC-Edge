@@ -8,7 +8,9 @@
 #include "ocudu/phy/upper/signal_processors/pusch/dmrs_pusch_estimator.h"
 #include "ocudu/ran/resource_allocation/rb_bitmap.h"
 #include "ocudu/ran/resource_block.h"
+#include "ocudu/ran/slot_point.h"
 #include "ocudu/support/executors/task_executor.h"
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -45,13 +47,19 @@ void zmq_sink::on_ch_estimate(const dmrs_pusch_estimator_results& est, const pus
   }
   const unsigned i_symbol = static_cast<unsigned>(sym);
 
-  // Capture rx_port 0 / layer 0 (SISO uplink).
+  // Read rx_port 0 / layer 0 (SISO uplink) into a temp bf16 buffer, then convert to complex64.
+  static_vector<cbf16_t, MAX_NOF_SUBCARRIERS> tmp(nof_sc);
+  est.get_symbol_ch_estimate(span<cbf16_t>(tmp.data(), tmp.size()), i_symbol, 0, 0, re_mask);
+
   auto cap = std::make_unique<capture>();
   cap->iq.resize(nof_sc);
-  est.get_symbol_ch_estimate(span<cbf16_t>(cap->iq.data(), cap->iq.size()), i_symbol, 0, 0, re_mask);
+  for (unsigned k = 0; k != nof_sc; ++k) {
+    cap->iq[k] = to_cf(tmp[k]);
+  }
 
   const int     lowest_rb = rb_mask.find_lowest();
   frame_header& h         = cap->hdr;
+  h.kind                  = KIND_CSI;
   h.scs_khz               = static_cast<uint16_t>(15u << pdu.slot.numerology());
   h.slot                  = pdu.slot.system_slot();
   h.rnti                  = pdu.rnti;
@@ -59,10 +67,43 @@ void zmq_sink::on_ch_estimate(const dmrs_pusch_estimator_results& est, const pus
   h.rx_port               = 0;
   h.tx_layer              = 0;
   h.rb_start              = static_cast<uint16_t>(lowest_rb < 0 ? 0 : lowest_rb);
-  h.nof_sc                = static_cast<uint16_t>(nof_sc);
+  h.count                 = static_cast<uint16_t>(nof_sc);
 
-  // Defer the serialize + send off the PHY thread. The publisher is captured by shared_ptr so it stays
-  // alive until this task runs, even if the sink is torn down first.
+  // Relaxed path: hand off to the executor; serialize+send happen off the PHY thread.
+  // The publisher is captured by shared_ptr so it stays valid until the deferred task runs.
+  std::shared_ptr<publisher> pub_ref = pub;
+  (void)exec.defer([pub_ref = std::move(pub_ref), cap = std::move(cap)]() { pub_ref->publish(*cap); });
+}
+
+void zmq_sink::on_eq_symbols(span<const cf_t> eq_symbols, uint16_t rnti, slot_point slot)
+{
+  // Sampling gate: keep one capture every 'decimation' slots.
+  if (decimation > 1 && (slot.system_slot() % decimation) != 0) {
+    return;
+  }
+
+  const unsigned n = std::min<unsigned>(eq_symbols.size(), MAX_NOF_SUBCARRIERS);
+  if (n == 0) {
+    return;
+  }
+
+  auto cap = std::make_unique<capture>();
+  cap->iq.resize(n);
+  for (unsigned k = 0; k != n; ++k) {
+    cap->iq[k] = eq_symbols[k];
+  }
+
+  frame_header& h = cap->hdr;
+  h.kind          = KIND_EQ;
+  h.scs_khz       = static_cast<uint16_t>(15u << slot.numerology());
+  h.slot          = slot.system_slot();
+  h.rnti          = rnti;
+  h.symbol        = 0;
+  h.rx_port       = 0;
+  h.tx_layer      = 0;
+  h.rb_start      = 0;
+  h.count         = static_cast<uint16_t>(n);
+
   std::shared_ptr<publisher> pub_ref = pub;
   (void)exec.defer([pub_ref = std::move(pub_ref), cap = std::move(cap)]() { pub_ref->publish(*cap); });
 }
