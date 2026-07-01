@@ -43,6 +43,17 @@ then
     exit 1
 fi
 
+### Enable IPv4/IPv6 Forwarding
+sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv6.conf.all.forwarding=1
+
+### Add NAT Rule
+iptables -t nat -A POSTROUTING -s 10.45.0.0/16 ! -o ogstun -j MASQUERADE
+ip6tables -t nat -A POSTROUTING -s 2001:db8:cafe::/48 ! -o ogstun -j MASQUERADE
+
+### Ensure that the packets in the `INPUT` chain to the `ogstun` interface are accepted
+iptables -I INPUT -i ogstun -j ACCEPT
+
 # Add subscriber data to open5gs mongo db
 echo "SUBSCRIBER_DB=${SUBSCRIBER_DB}"
 python3 add_users.py --mongodb ${MONGODB_IP} --subscriber_data ${SUBSCRIBER_DB}
