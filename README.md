@@ -1,43 +1,76 @@
-# The OCUDU Project
+# OpenISAC-Edge
 
-[![Pipeline](https://gitlab.com/ocudu/ocudu/badges/main/pipeline.svg)](https://gitlab.com/ocudu/ocudu/-/pipelines?scope=branches)
-[![Documentation](https://img.shields.io/badge/docs-built-green?logo=docusaurus)](https://docs.ocudu.org)
-![Code](https://img.shields.io/badge/code-C++17-informational)
-![Build](https://img.shields.io/badge/build-CMake-informational)
-[![License](https://img.shields.io/badge/license-BSD--3--Clause--Open--MPI-blue)](https://spdx.org/licenses/BSD-3-Clause-Open-MPI.html)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11899/badge)](https://www.bestpractices.dev/projects/11899)
-[![Coverage](https://gitlab.com/ocudu/ocudu/badges/main/coverage.svg?min_good=98&min_acceptable=60)](https://docs.ocudu.org/coverage/index.html)
+**An open platform for reproducible integrated sensing and communication (ISAC) experimentation on a complete open 5G network.**
 
-<img src="https://srs.io/wp-content/uploads/ocudu_color.png" alt="image" width="50%"/>
+Developed by the [WINGS Lab](https://luna-xue.github.io/) at the University of Hawaiʻi at Mānoa. Publicly developed in this organization since February 2026; first tagged release [v0.1.0](https://github.com/OpenISAC-Edge/OpenISAC-Edge/releases/tag/v0.1.0) (August 2026).
 
-OCUDU is a permissively-licensed, open-source 5G (and beyond) CU/DU project designed for commercial deployment and broad industry adoption, as well as advanced research and development. OCUDU is a complete radio access network (RAN) solution compliant with 3GPP and O-RAN Alliance specifications and includes the full L1/2/3 stack with minimal external dependencies. OCUDU is governed under the Linux Foundation.
+<!-- Replace with badges that describe THIS repository, not upstream OCUDU: -->
+[![Release](https://img.shields.io/github/v/release/OpenISAC-Edge/OpenISAC-Edge)](https://github.com/OpenISAC-Edge/OpenISAC-Edge/releases)
+[![License](https://img.shields.io/badge/license-<see_License_section>-blue)](#license)
+[![Project site](https://img.shields.io/badge/project-site-green)](https://luna-xue.github.io/pages/open-source/openisac-edge/)
 
-This repository contains the RAN source code, architecture documentation, and tooling.
+## What is OpenISAC-Edge
 
-For general information, visit https://ocudu.org.
+OpenISAC-Edge lets researchers and students run ISAC experiments end to end on open-source infrastructure. The reference deployment combines the [OCUDU](https://ocudu.org) radio access network with the [free5GC](https://free5gc.org) core into a complete open 5G system, streams channel state information (CSI) from the running network, and provides tools for evaluating and visualizing sensing models against live or recorded measurements. Modular interfaces connect additional sensing models, radios, edge devices, and ISAC accelerators.
+
+## What is in this repository
+
+<!-- Adjust to the actual repository layout. Every component named in the
+     PESOSE Project Description Section 2 should be findable from here. -->
+- **ISAC-enhanced RAN** (`<path>`): OCUDU-based CU/DU with ISAC-specific metric extraction, extended WebSocket telemetry adapters, and visualization hooks. Tracks upstream OCUDU releases.
+- **Reference core configuration** (`<path>`): free5GC configuration files and deployment manifests for the complete open 5G reference system.
+- **CSI streaming and sensing tools** (`<path>`): CSI capture and streaming pipeline, sensing model evaluation harness, and visualization tools.
+- **Documentation** (`<path>`): installation and deployment guides and the reference configuration used in the v0.1.0 release.
+
+## Relationship to upstream OCUDU
+
+OpenISAC-Edge builds on OCUDU, a permissively licensed open-source 5G CU/DU project governed under the Linux Foundation. This repository tracks upstream OCUDU releases and adds the instrumentation needed for ISAC research. The WINGS Lab participates in the OCUDU community through the University of Hawaiʻi System's associate membership in the Linux Foundation OCUDU Ecosystem Foundation, and changes of general use are proposed upstream through the normal OCUDU contribution and review processes rather than accumulating in this repository. OpenISAC-Edge is an independent project of the WINGS Lab and is not endorsed by the upstream OCUDU maintainers; "OCUDU" is used here to identify the upstream project.
 
 ## Getting started
 
-Build instructions and user guides are provided in the [OCUDU User manual](https://docs.ocudu.org/user_manual/installation/). We also host an extensive selection of tutorials.
+Prerequisites: `<OS / SDR hardware (e.g., USRP <model>) / GPU (optional) / container runtime>`.
 
-## Documentation
+1. `<clone / build or pull container images>`
+2. `<deploy the reference OCUDU + free5GC configuration>`
+3. `<start CSI streaming and run the example sensing model>`
 
-Complete project documentation including developer guideline, configuration reference, tutorials, etc. is
-hosted in [this](https://gitlab.com/ocudu/ocudu_docs) repo. The most recent version of the documentation
-is available [here](https://docs.ocudu.org).
+Step-by-step installation, configuration, and deployment instructions: `<link to docs in this repo>`. A companion walkthrough from environment setup to a running O-RAN/AI-RAN testbed is available in the [WINGS Lab testbed tutorial](https://luna-xue.github.io/pages/docs/oran/).
 
-## Contributing
+The v0.1.0 release has been validated on the documented OCUDU + free5GC reference configuration. Additional radios, edge devices, and hardware targets are candidate integrations for future releases.
 
-Our project welcomes contributions from any member of our community. To get started contributing,
-please take a look at the [Developer Guide](https://docs.ocudu.org/dev_guide/contributing_guide/) with detailed instructions on how to best engange with us.
+## Documentation and community
 
-## Governance
+- Project site: <https://luna-xue.github.io/pages/open-source/openisac-edge/>
+- Questions and discussion: [GitHub Discussions](https://github.com/OpenISAC-Edge/OpenISAC-Edge/discussions)
+- Bug reports and feature requests: [Issues](https://github.com/OpenISAC-Edge/OpenISAC-Edge/issues)
+- Contributions are welcome through pull requests; see [CONTRIBUTING.md](./CONTRIBUTING.md) and our [Code of Conduct](./CODE_OF_CONDUCT.md). Development happens in public, led by the WINGS Lab team with student contributions.
 
-The OCUDU project is governed by a framework of principles, values, policies and processes to help our community and constituents towards our shared goals.
+## Security
 
-The [Governance](https://gitlab.com/ocudu/Governance) repo is used by the Technical Steering Committee, which oversees governance of the project.
+Please report suspected vulnerabilities privately to `<security contact email>` rather than through public issues; see [SECURITY.md](./SECURITY.md). We follow coordinated disclosure: details of unresolved vulnerabilities are withheld until affected users have been notified and a fix or mitigation is available.
+
+## Users and adopters
+
+OpenISAC-Edge is used in UHM courses ECE 669 and ECE 693E, by the mmWave ISAC Vertically Integrated Projects team, and in the JESSE physical-AI and robotic-car projects. It underpins the UHM FutureG testbed and the DOE Genesis project STRATOS. Groups outside the developing team have evaluated it in mmWave hardware integration, security, open-source silicon, BioHealth, agriculture, and transportation contexts. If you are using OpenISAC-Edge, we would like to hear from you through Discussions.
 
 ## License
 
-This project is licensed under the BSD 3-Clause Open MPI variant License – see the [LICENSE](./LICENSE) file for details.
-Portions of this software may implement 3GPP specifications, which may be subject to additional licensing requirements.
+<!-- OPTION (a): single license, simplest and always defensible -->
+This repository is licensed under the BSD 3-Clause Open MPI variant license inherited from the upstream OCUDU project; see [LICENSE](./LICENSE). Portions of this software may implement 3GPP specifications, which may be subject to additional licensing requirements.
+
+<!-- OPTION (b): split licensing; use ONLY if you separate the code and add
+     LICENSE-APACHE and NOTICE files today. Delete option (a) if used.
+OCUDU-derived code in `<paths>` remains under the BSD 3-Clause Open MPI variant license of the upstream project; see [LICENSE](./LICENSE). Components original to OpenISAC-Edge in `<paths>` (CSI streaming, sensing model evaluation and visualization tools, and deployment configurations) are licensed under the Apache License 2.0; see [LICENSE-APACHE](./LICENSE-APACHE). The [NOTICE](./NOTICE) file describes which license applies to which part of the tree. Portions of this software may implement 3GPP specifications, which may be subject to additional licensing requirements.
+-->
+
+## Citing OpenISAC-Edge
+
+If you use OpenISAC-Edge in your research, please cite:
+
+> X. Xue, H. Tang, Y. Zheng, and B. Murmann. OpenISAC-Edge: An Open-Source Resource for AI-Native ISAC Experimentation. University of Hawaiʻi at Mānoa, 2026. https://github.com/OpenISAC-Edge
+
+A machine-readable citation is provided in [CITATION.cff](./CITATION.cff).
+
+## Acknowledgments
+
+OpenISAC-Edge originated in work supported by the U.S. National Science Foundation under CyberTraining award #2417891 and by an NVIDIA Academic Grant Program award. Any opinions, findings, and conclusions are those of the authors and do not necessarily reflect the views of the sponsors.
