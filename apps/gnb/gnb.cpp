@@ -285,6 +285,7 @@ int main(int argc, char** argv)
   if (!validate_appconfig(gnb_cfg) || !o_cu_cp_app_unit->on_configuration_validation() ||
       !o_cu_up_app_unit->on_configuration_validation(not gnb_cfg.trace_cfg.filename.empty()) ||
       !o_du_app_unit->on_configuration_validation() ||
+      !validate_isac_appconfig(gnb_cfg.isac_cfg, o_du_app_unit->get_o_du_high_unit_config().du_high_cfg.config) ||
       !validate_plmn_and_tacs(o_du_app_unit->get_o_du_high_unit_config().du_high_cfg.config,
                               o_cu_cp_app_unit->get_o_cu_cp_unit_config().cucp_cfg)) {
     report_error("Invalid configuration detected.\n");
@@ -383,13 +384,20 @@ int main(int argc, char** argv)
   worker_manager workers{worker_manager_cfg};
 
   //ISAC TAP begin
-  // Construct and register the ISAC channel-estimate tap (ZMQ PUB). Bind IP reuses remote_control.bind_addr.
+  // Construct the optional exporter only after configuration has been validated.
   std::unique_ptr<isac::zmq_sink> isac_tap_sink;
-  if (gnb_cfg.metrics_cfg.isac_stream) {
-    const std::string isac_ep =
-        fmt::format("tcp://{}:{}", gnb_cfg.remote_control_config.bind_addr, gnb_cfg.metrics_cfg.isac_port);
-    fmt::println("ISAC Tap at {}", isac_ep);
-    isac_tap_sink = std::make_unique<isac::zmq_sink>(isac_ep, workers.get_metrics_executor());
+  if (gnb_cfg.isac_cfg.enabled) {
+    const auto&       cfg     = gnb_cfg.isac_cfg;
+    const std::string isac_ep = fmt::format("tcp://{}:{}", cfg.bind_addr, cfg.port);
+    isac_tap_sink =
+        std::make_unique<isac::zmq_sink>(isac_ep, workers.get_metrics_executor(), 1, cfg.nof_rx_ports, cfg.nof_tx_layers);
+    if (!isac_tap_sink->is_open()) {
+      report_error("Unable to initialize or bind the ISAC publisher at {}.\n", isac_ep);
+    }
+    fmt::println("ISAC Tap at {}: capturing up to {} RX ports x {} TX layers per PUSCH (shared metrics executor).",
+                 isac_ep,
+                 cfg.nof_rx_ports,
+                 cfg.nof_tx_layers);
     isac::register_sink(isac_tap_sink.get());
   }
   //ISAC TAP END
@@ -656,6 +664,10 @@ int main(int argc, char** argv)
   //ISAC TAP begin
   // Stop feeding the ISAC tap (PHY is stopped above); queued sends already hold the publisher alive.
   isac::register_sink(nullptr);
+  if (isac_tap_sink) {
+    fmt::println("ISAC CSI captures rejected by executor: {} (does not include ZMQ/subscriber losses).",
+                 isac_tap_sink->get_rejected_csi_captures());
+  }
   //ISAC TAP END
 
   // Stop gateway SCTP servers.

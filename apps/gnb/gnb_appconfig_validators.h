@@ -14,6 +14,9 @@ struct du_high_unit_config;
 /// Validates the given GNB application configuration. Returns true on success, false otherwise.
 bool validate_appconfig(const gnb_appconfig& config);
 
+/// Checks enabled ISAC capture limits against each configured cell without changing its PHY configuration.
+bool validate_isac_appconfig(const isac_appconfig& config, const du_high_unit_config& du_hi_cfg);
+
 /// Validates that the DU PLMNs and TACs are present in the CU-CP config.
 bool validate_plmn_and_tacs(const du_high_unit_config& du_hi_cfg, const cu_cp_unit_config& cu_cp_cfg);
 

@@ -22,6 +22,98 @@ The extension is only a naming convention. `.bin` is used because the capture
 is a custom binary container; an older `.isacraw` file has the same format and
 can be read identically.
 
+## gNB configuration and CSI path selection
+
+The ISAC exporter has its own top-level YAML section. The defaults are:
+
+```yaml
+isac:
+  enabled: false
+  bind_addr: 127.0.0.1
+  port: 5556
+  nof_rx_ports: 1
+  nof_tx_layers: 1
+```
+
+Setting only `enabled: true` retains the default CSI selection of the first
+participating RX port and layer 0, and also retains the existing EQ stream.
+Use `bind_addr: 0.0.0.0` to accept subscribers from another PC; subscribers
+connect to the gNB's reachable IP address, not to `0.0.0.0`. Use a numeric IPv4
+bind address. The ISAC address is independent of remote control. ISAC settings
+are accepted only in this top-level section, not under `metrics`.
+
+For multi-path CSI capture, for example:
+
+```yaml
+isac:
+  enabled: true
+  bind_addr: 0.0.0.0
+  port: 5556
+  nof_rx_ports: 2
+  nof_tx_layers: 2
+```
+
+These are **capture counts**, not port/layer indices or radio settings. They
+select up to the first N entries in the PUSCH RX-port list and up to the first
+N active UE TX layers. Configure receiving antennas and permitted PUSCH rank
+separately in `cell_cfg`. RX-port and layer counts are independent: capturing
+two layers from one RX port is valid when the underlying PUSCH supports it.
+
+For two UL layers, the cell needs at least two `nof_antennas_ul`, a
+`pusch.max_rank` of at least two, transform precoding disabled, and a UE-dedicated
+SS2 with `pdcch.dedicated.dci_format_0_1_and_1_1: true`. The UE must also support
+and actually be scheduled with two layers. A two-port/one-layer capture does
+not require a two-layer UE transmission.
+
+The actual dimensions are read from each processed PUSCH, rather than assumed
+from the configured maximum rank. Each existing selected pair produces one
+complete allocated-subcarrier CSI vector, with no sample truncation or padding:
+
+| Actual PUSCH (RX ports × layers) | Requested capture | CSI messages per captured PUSCH |
+|---|---|---|
+| 1 × 1 | 1 × 1 | RX0/L0 |
+| 2 × 1 | 2 × 2 | RX0/L0, RX1/L0 |
+| 2 × 2 | 2 × 2 | RX0/L0, RX0/L1, RX1/L0, RX1/L1 |
+| 2 × 2 | 1 × 2 | RX0/L0, RX0/L1 |
+| 4 × 4 | 4 × 4 | 16 separate path messages |
+
+The examples assume RX-port identities start at zero. The message identifies
+the configured grid port, which may differ from its position in the PUSCH list.
+Layers describe effective UE transmission streams, not physical UE antennas.
+Absent layers produce no messages; a later rank increase exposes the additional
+selected paths automatically. A numerical zero inside an existing estimate is
+not the same as an absent path.
+
+### Configuration guards
+
+- Unknown fields, invalid types, zero/negative counts and TCP ports outside
+  `1..65535` are rejected even when ISAC is disabled.
+- When enabled, the bind address must be a numeric IP address. The requested
+  port count must fit every configured cell's UL RX capacity, and the layer
+  count must fit its effective UL layer limit (including maximum rank,
+  transform precoding and DCI/search-space restrictions).
+- At runtime, each count is independently limited to the actual PUSCH count.
+  Capture selection never changes estimation, equalization, scheduling or rank.
+- A publisher initialization/bind failure stops startup with an error.
+- When disabled, no ISAC publisher is constructed or sink registered. Address
+  and cell-capacity compatibility checks are skipped.
+
+### Queueing and capture completeness
+
+The tap copies estimates before their buffers can be reused, then defers
+serialization and publication to the existing **shared metrics executor**.
+There is no additional timer, receiver acknowledgement or matrix-completion
+barrier. More paths increase copying and queue/transport load; the export is
+not zero-overhead and has no dedicated worker yet.
+
+Executor enqueue failures discard whole path captures rather than shorten
+vectors. Shutdown reports `ISAC CSI captures rejected by executor`. This counts
+failed CSI submissions, not all transport losses: ZMQ PUB delivery is best-effort
+and can silently drop messages for unavailable/slow subscribers. Other executor
+dispatch failures can also discard previously queued work. A complete vector
+does not guarantee a complete matrix or a lossless time series. No new drop
+counter is added to the unchanged raw recorder.
+
 ## What an ISAC ZeroMQ message contains
 
 The gNB publishes CSI and equalized-symbol frames on the same ZeroMQ PUB
@@ -50,9 +142,9 @@ FRAME_HEADER = struct.Struct("<IHBHIHBBBHH")
 | 7 | `scs_khz` | `uint16` | Subcarrier spacing in kHz |
 | 9 | `slot` | `uint32` | System slot number |
 | 13 | `rnti` | `uint16` | UE RNTI |
-| 15 | `symbol` | `uint8` | OFDM symbol index represented by the frame |
-| 16 | `rx_port` | `uint8` | Receive-port index |
-| 17 | `tx_layer` | `uint8` | Transmit-layer index |
+| 15 | `symbol` | `uint8` | CSI estimate's OFDM symbol index; EQ currently uses placeholder 0 |
+| 16 | `rx_port` | `uint8` | CSI configured RX-port identity; EQ currently uses placeholder 0 |
+| 17 | `tx_layer` | `uint8` | CSI UE layer index; EQ currently uses placeholder 0 |
 | 18 | `rb_start` | `uint16` | First RB represented by the vector |
 | 20 | `count` | `uint16` | Number of complex samples following the header |
 
@@ -69,10 +161,21 @@ For the current publisher:
   subcarrier in the full carrier bandwidth;
 - `symbol` identifies which OFDM symbol the CSI vector belongs to.
 
+The v2 header and complex64 payload format are unchanged. Each CSI message
+contains only one RX-port/layer pair; it is not a flattened MIMO matrix. The
+selected symbol remains the first DMRS symbol in the PUSCH. With the default
+`average` estimator strategy, its coefficients are time-averaged estimates,
+not independent instantaneous measurements of every DMRS symbol.
+
+EQ export is unchanged: one message for the first OFDM symbol containing data
+per PUSCH, with layers interleaved RE-major. Its port/layer fields do not label
+individual paths, and the existing export-length cap remains. The CSI capture
+counts do not filter EQ or determine its actual layer count.
+
 In particular, a current CSI frame is best understood as:
 
 ```text
-CSI frame = H[k] for one symbol, where k runs over the active subcarriers
+CSI frame = H[rx_port, tx_layer, k] for one selected estimate symbol
 ```
 
 If only one DMRS symbol is exported, a per-slot `SC × Sym` grid will naturally
@@ -233,10 +336,53 @@ For large captures, process frames incrementally rather than building lists:
 ```python
 for frame in read_capture("isac_capture_20261020_143015.bin"):
     if frame["kind"] == CSI:
-        process_csi(frame["iq"], frame["slot"])
+        process_csi(
+            frame["iq"], frame["slot"], frame["rnti"],
+            frame["rx_port"], frame["tx_layer"],
+        )
     elif frame["kind"] == EQ:
         process_equalized_symbols(frame["iq"], frame["slot"])
 ```
+
+### Select one CSI path before time-series analysis
+
+When multiple paths are exported, do not append their coefficients into one
+Doppler time series. Select a UE and path first:
+
+```python
+selected_rnti, selected_rx_port, selected_tx_layer = 0x4601, 1, 0
+
+selected_csi = [
+    frame for frame in csi_frames
+    if (frame["rnti"], frame["rx_port"], frame["tx_layer"])
+    == (selected_rnti, selected_rx_port, selected_tx_layer)
+]
+```
+
+Both GNU Radio blocks accept appended `rx_port=0` and `tx_layer=0` arguments:
+
+```python
+# In isac_gr_block.py (CSI source):
+blk(endpoint="tcp://127.0.0.1:5556", kind=0, sc=0,
+    rnti=0x4601, rx_port=1, tx_layer=0)
+
+# In isac_doppler_block.py (Doppler spectrum):
+blk(endpoint="tcp://127.0.0.1:5556", sc=0, nfft=1024, hop=128,
+    rnti=0x4601, rx_port=1, tx_layer=0)
+```
+
+Run separate block instances for separate paths. The port/layer filters apply
+only to CSI; the general block's EQ behavior is unchanged. Existing positional
+arguments still work. `sc` remains a vector-relative index, not a global
+subcarrier index; changing allocations can change which physical subcarrier
+that index represents. The default `rnti=-1` accepts all UEs, so choose an
+explicit RNTI when constructing a single UE's Doppler history.
+
+These blocks do not interpolate missing slots, reconstruct dropped messages,
+or resample irregular arrivals. Slot-rate sampling assumes one captured PUSCH
+per slot for the chosen path. Joining mid-run is supported; earlier packets
+cannot be replayed. The raw recorder continues to save every received path
+and both frame kinds regardless of these analysis filters.
 
 ## 3. Zero-initialize and populate an `SC × Sym` CSI grid
 

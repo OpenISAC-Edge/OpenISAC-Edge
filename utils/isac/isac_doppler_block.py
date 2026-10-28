@@ -3,8 +3,8 @@
 """
 GNURadio Embedded Python Block: near-real-time Doppler spectrum from the ISAC CSI stream.
 
-Subscribes to the gNB ISAC PUB stream, tracks channel-estimate subcarrier `sc` over slots (the
-slow-time signal at the slot rate), and emits a magnitude spectrum VECTOR:
+Subscribes to the gNB ISAC PUB stream, tracks vector index `sc` for one selected RX port and
+TX layer (both default to zero), and emits a magnitude spectrum VECTOR:
   - keeps a rolling window of `nfft` samples,
   - subtracts the window mean (removes the strong 0 Hz static-clutter return),
   - emits |FFT| in dB, fftshift'd so DC is centered, every `hop` new samples.
@@ -17,7 +17,8 @@ USAGE (GNURadio Companion):
   Wire it to a QT GUI Vector Sink:
     - vlen = nfft
     - X-axis: start = -samp_rate/2, step = samp_rate/nfft   (Hz; samp_rate = slot rate 1000 or 2000)
-  Start this flowgraph BEFORE the gNB; need continuous UL traffic for slot-rate frames.
+  The subscriber can start at any time, but cannot replay earlier messages. Slot-rate sampling
+  requires one captured PUSCH per slot for the selected UE/path; missing observations are not padded.
 
 Recommended: nfft = 1024 (≈1 Hz resolution — needed to separate 2–10 Hz from 0 Hz clutter),
 hop = 128 (≈8 updates/sec). Reduce hop for smoother/faster redraw (more overlap).
@@ -44,12 +45,17 @@ _EPS = 1e-12
 class blk(gr.sync_block):
     """Sliding-window Doppler spectrum (dB, DC-centered) of a chosen CSI subcarrier."""
 
-    def __init__(self, endpoint="tcp://127.0.0.1:5556", sc=0, nfft=1024, hop=128, rnti=-1, remove_dc=True):
+    def __init__(self, endpoint="tcp://127.0.0.1:5556", sc=0, nfft=1024, hop=128, rnti=-1, remove_dc=True,
+                 rx_port=0, tx_layer=0):
         self.nfft = int(nfft)
         gr.sync_block.__init__(self, name="ISAC Doppler", in_sig=None, out_sig=[(np.float32, self.nfft)])
         self.sc = int(sc)
         self.hop = max(1, int(hop))
         self.rnti = int(rnti)
+        self.rx_port = int(rx_port)
+        self.tx_layer = int(tx_layer)
+        if self.sc < 0 or not 0 <= self.rx_port <= 255 or not 0 <= self.tx_layer <= 255:
+            raise ValueError("sc must be non-negative and rx_port/tx_layer must be in 0..255")
         self.remove_dc = bool(remove_dc)
 
         self._win = np.zeros(self.nfft, dtype=np.complex64)  # rolling slow-time window
@@ -66,10 +72,12 @@ class blk(gr.sync_block):
         """Return subcarrier `sc` of a CSI frame, or None."""
         if len(msg) < _HDR.size:
             return None
-        magic, _v, kind, _scs, _slot, rnti, _sym, _rx, _ly, _rb, count = _HDR.unpack_from(msg, 0)
-        if magic != _MAGIC or kind != _KIND_CSI:
+        magic, version, kind, _scs, _slot, rnti, _sym, rx, layer, _rb, count = _HDR.unpack_from(msg, 0)
+        if magic != _MAGIC or version != 2 or kind != _KIND_CSI:
             return None
         if self.rnti >= 0 and rnti != self.rnti:
+            return None
+        if rx != self.rx_port or layer != self.tx_layer:
             return None
         if self.sc >= count or len(msg) < _HDR.size + count * 8:
             return None

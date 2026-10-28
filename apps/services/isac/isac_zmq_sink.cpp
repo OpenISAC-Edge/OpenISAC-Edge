@@ -17,8 +17,16 @@
 using namespace ocudu;
 using namespace ocudu::isac;
 
-zmq_sink::zmq_sink(const std::string& endpoint, task_executor& exec_, unsigned decimation_) :
-  pub(std::make_shared<publisher>(endpoint)), exec(exec_), decimation(decimation_ == 0 ? 1 : decimation_)
+zmq_sink::zmq_sink(const std::string& endpoint,
+                   task_executor&     exec_,
+                   unsigned           decimation_,
+                   unsigned           nof_rx_ports_,
+                   unsigned           nof_tx_layers_) :
+  pub(std::make_shared<publisher>(endpoint)),
+  exec(exec_),
+  decimation(decimation_ == 0 ? 1 : decimation_),
+  nof_rx_ports(nof_rx_ports_),
+  nof_tx_layers(nof_tx_layers_)
 {
 }
 
@@ -26,6 +34,12 @@ void zmq_sink::on_ch_estimate(const dmrs_pusch_estimator_results& est, const pus
 {
   // Sampling gate: keep one capture every 'decimation' slots.
   if (decimation > 1 && (pdu.slot.system_slot() % decimation) != 0) {
+    return;
+  }
+
+  const unsigned capture_ports  = std::min(nof_rx_ports, static_cast<unsigned>(pdu.rx_ports.size()));
+  const unsigned capture_layers = std::min(nof_tx_layers, pdu.nof_tx_layers);
+  if (capture_ports == 0 || capture_layers == 0) {
     return;
   }
 
@@ -47,32 +61,38 @@ void zmq_sink::on_ch_estimate(const dmrs_pusch_estimator_results& est, const pus
   }
   const unsigned i_symbol = static_cast<unsigned>(sym);
 
-  // Read rx_port 0 / layer 0 (SISO uplink) into a temp bf16 buffer, then convert to complex64.
+  // Reuse the temporary extraction buffer; every queued capture owns a separate full copy.
   static_vector<cbf16_t, MAX_NOF_SUBCARRIERS> tmp(nof_sc);
-  est.get_symbol_ch_estimate(span<cbf16_t>(tmp.data(), tmp.size()), i_symbol, 0, 0, re_mask);
+  const int lowest_rb = rb_mask.find_lowest();
+  for (unsigned rx = 0; rx != capture_ports; ++rx) {
+    for (unsigned layer = 0; layer != capture_layers; ++layer) {
+      // The estimator uses a local port index, while the wire header identifies the configured grid port.
+      est.get_symbol_ch_estimate(span<cbf16_t>(tmp.data(), tmp.size()), i_symbol, rx, layer, re_mask);
 
-  auto cap = std::make_unique<capture>();
-  cap->iq.resize(nof_sc);
-  for (unsigned k = 0; k != nof_sc; ++k) {
-    cap->iq[k] = to_cf(tmp[k]);
+      auto cap = std::make_unique<capture>();
+      cap->iq.resize(nof_sc);
+      for (unsigned k = 0; k != nof_sc; ++k) {
+        cap->iq[k] = to_cf(tmp[k]);
+      }
+
+      frame_header& h = cap->hdr;
+      h.kind          = KIND_CSI;
+      h.scs_khz       = static_cast<uint16_t>(15u << pdu.slot.numerology());
+      h.slot          = pdu.slot.system_slot();
+      h.rnti          = pdu.rnti;
+      h.symbol        = static_cast<uint8_t>(i_symbol);
+      h.rx_port       = pdu.rx_ports[rx];
+      h.tx_layer      = static_cast<uint8_t>(layer);
+      h.rb_start      = static_cast<uint16_t>(lowest_rb < 0 ? 0 : lowest_rb);
+      h.count         = static_cast<uint16_t>(nof_sc);
+
+      // Never wait for queue space on the PHY path. Serialization and transport remain deferred.
+      std::shared_ptr<publisher> pub_ref = pub;
+      if (!exec.defer([pub_ref = std::move(pub_ref), cap = std::move(cap)]() { pub_ref->publish(*cap); })) {
+        rejected_csi_captures.fetch_add(1, std::memory_order_relaxed);
+      }
+    }
   }
-
-  const int     lowest_rb = rb_mask.find_lowest();
-  frame_header& h         = cap->hdr;
-  h.kind                  = KIND_CSI;
-  h.scs_khz               = static_cast<uint16_t>(15u << pdu.slot.numerology());
-  h.slot                  = pdu.slot.system_slot();
-  h.rnti                  = pdu.rnti;
-  h.symbol                = static_cast<uint8_t>(i_symbol);
-  h.rx_port               = 0;
-  h.tx_layer              = 0;
-  h.rb_start              = static_cast<uint16_t>(lowest_rb < 0 ? 0 : lowest_rb);
-  h.count                 = static_cast<uint16_t>(nof_sc);
-
-  // Relaxed path: hand off to the executor; serialize+send happen off the PHY thread.
-  // The publisher is captured by shared_ptr so it stays valid until the deferred task runs.
-  std::shared_ptr<publisher> pub_ref = pub;
-  (void)exec.defer([pub_ref = std::move(pub_ref), cap = std::move(cap)]() { pub_ref->publish(*cap); });
 }
 
 void zmq_sink::on_eq_symbols(span<const cf_t> eq_symbols, uint16_t rnti, slot_point slot)

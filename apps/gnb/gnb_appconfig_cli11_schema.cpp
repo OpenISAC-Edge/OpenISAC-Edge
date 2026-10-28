@@ -18,6 +18,7 @@
 #include "ocudu/ocudulog/ocudulog.h"
 #include "ocudu/support/cli11_utils.h"
 #include "CLI/CLI11.hpp"
+#include <limits>
 
 using namespace ocudu;
 
@@ -26,11 +27,21 @@ static void configure_cli11_metrics_args(CLI::App& app, metrics_appconfig& metri
   add_option(
       app, "--autostart_stdout_metrics", metrics_params.autostart_stdout_metrics, "Autostart stdout metrics reporting")
       ->capture_default_str();
-  //ISAC TAP begin
-  add_option(app, "--isac_stream", metrics_params.isac_stream, "Enable the ISAC channel-estimate ZMQ tap")
-      ->capture_default_str();
-  add_option(app, "--isac_port", metrics_params.isac_port, "ISAC tap ZMQ PUB port")->capture_default_str();
-  //ISAC TAP END
+}
+
+static void configure_cli11_isac_args(CLI::App& app, isac_appconfig& config)
+{
+  add_option(app, "--enabled", config.enabled, "Enable ISAC observation export")->capture_default_str();
+  add_option(app, "--bind_addr", config.bind_addr, "ISAC publisher bind IPv4 address")->capture_default_str();
+  add_option(app, "--port", config.port, "ISAC ZMQ PUB TCP port")
+      ->capture_default_str()
+      ->check(CLI::Range(1, 65535));
+  add_option(app, "--nof_rx_ports", config.nof_rx_ports, "Capture up to the first N participating PUSCH RX ports")
+      ->capture_default_str()
+      ->check(CLI::Range(1U, std::numeric_limits<unsigned>::max()));
+  add_option(app, "--nof_tx_layers", config.nof_tx_layers, "Capture up to the first N active PUSCH TX layers")
+      ->capture_default_str()
+      ->check(CLI::Range(1U, std::numeric_limits<unsigned>::max()));
 }
 
 #ifdef DPDK_FOUND
@@ -71,6 +82,9 @@ void ocudu::configure_cli11_with_gnb_appconfig_schema(CLI::App& app, gnb_appconf
   app_services::configure_cli11_with_executor_metrics_appconfig_schema(app, gnb_cfg.metrics_cfg.executors_metrics_cfg);
   app_services::configure_cli11_with_app_resource_usage_config_schema(app, gnb_cfg.metrics_cfg.rusage_config);
   app_services::configure_cli11_with_metrics_appconfig_schema(app, gnb_cfg.metrics_cfg.metrics_service_cfg);
+
+  CLI::App* isac_subcmd = add_subcommand(app, "isac", "ISAC observation export configuration")->configurable();
+  configure_cli11_isac_args(*isac_subcmd, gnb_cfg.isac_cfg);
 
 #ifdef DPDK_FOUND
   // HAL section.

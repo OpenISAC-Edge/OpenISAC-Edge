@@ -27,11 +27,16 @@ struct metrics_appconfig {
   app_services::app_resource_usage_config rusage_config;
   app_services::metrics_appconfig         metrics_service_cfg;
   app_services::executor_metrics_config   executors_metrics_cfg;
-  bool                                    autostart_stdout_metrics = false;
-  //ISAC TAP begin
-  bool                                    isac_stream              = false;
-  uint16_t                                isac_port                = 5556;
-  //ISAC TAP END
+  bool                                   autostart_stdout_metrics = false;
+};
+
+/// ISAC observation export. Counts select the first participating ports/layers, not the radio configuration.
+struct isac_appconfig {
+  bool        enabled       = false;
+  std::string bind_addr     = "127.0.0.1";
+  uint16_t    port          = 5556;
+  unsigned    nof_rx_ports  = 1;
+  unsigned    nof_tx_layers = 1;
 };
 
 /// Monolithic gnb application configuration.
@@ -44,6 +49,8 @@ struct gnb_appconfig {
   tracer_appconfig trace_cfg;
   /// Metrics configuration.
   metrics_appconfig metrics_cfg;
+  /// ISAC capture and transport configuration.
+  isac_appconfig isac_cfg;
   /// gNodeB identifier.
   gnb_id_t gnb_id = {411, 22};
   /// Node name.

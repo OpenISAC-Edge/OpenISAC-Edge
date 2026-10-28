@@ -7,6 +7,9 @@
 #include "apps/services/worker_manager/worker_manager_appconfig_validator.h"
 #include "apps/units/flexible_o_du/o_du_high/du_high/du_high_config.h"
 #include "apps/units/o_cu_cp/cu_cp/cu_cp_unit_config.h"
+#include "ocudu/ran/pusch/pusch_constants.h"
+#include <algorithm>
+#include <arpa/inet.h>
 
 using namespace ocudu;
 
@@ -35,13 +38,54 @@ bool ocudu::validate_appconfig(const gnb_appconfig& config)
     return false;
   }
 
-  //ISAC TAP begin
-  if (config.metrics_cfg.isac_stream && config.metrics_cfg.isac_port == 0) {
-    fmt::print("ISAC tap enabled (isac_stream) but isac_port is 0\n");
+  if (config.isac_cfg.port == 0 || config.isac_cfg.nof_rx_ports == 0 || config.isac_cfg.nof_tx_layers == 0) {
+    fmt::print("ISAC port and capture counts must be positive, even when export is disabled.\n");
     return false;
   }
-  //ISAC TAP END
 
+  return true;
+}
+
+bool ocudu::validate_isac_appconfig(const isac_appconfig& config, const du_high_unit_config& du_hi_cfg)
+{
+  if (!config.enabled) {
+    return true;
+  }
+
+  in_addr ipv4{};
+  if (::inet_pton(AF_INET, config.bind_addr.c_str(), &ipv4) != 1) {
+    fmt::print("Invalid isac.bind_addr '{}': expected a numeric IPv4 address.\n", config.bind_addr);
+    return false;
+  }
+
+  if (du_hi_cfg.cells_cfg.empty()) {
+    fmt::print("ISAC requires at least one configured cell.\n");
+    return false;
+  }
+
+  for (unsigned cell_index = 0; cell_index != du_hi_cfg.cells_cfg.size(); ++cell_index) {
+    const auto& cell = du_hi_cfg.cells_cfg[cell_index].cell;
+    if (config.nof_rx_ports > cell.nof_antennas_ul) {
+      fmt::print("ISAC requests {} RX ports, but cell {} has {} configured UL RX ports.\n",
+                 config.nof_rx_ports,
+                 cell_index,
+                 cell.nof_antennas_ul);
+      return false;
+    }
+
+    const bool single_layer =
+        cell.pusch_cfg.enable_transform_precoding || !cell.pdcch_cfg.dedicated.dci_format_0_1_and_1_1 ||
+        cell.pdcch_cfg.dedicated.ss2_type == search_space_configuration::type_t::common;
+    const unsigned max_layers =
+        single_layer ? 1U : std::min({cell.nof_antennas_ul, pusch_constants::MAX_NOF_LAYERS, cell.pusch_cfg.max_rank});
+    if (config.nof_tx_layers > max_layers) {
+      fmt::print("ISAC requests {} TX layers, but cell {} permits at most {} UL layers.\n",
+                 config.nof_tx_layers,
+                 cell_index,
+                 max_layers);
+      return false;
+    }
+  }
   return true;
 }
 
