@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: Copyright (C) 2026 OCUDU ISAC fork contributors
-# SPDX-License-Identifier: BSD-3-Clause-Open-MPI
 """Lossless recorder for the OCUDU ISAC ZeroMQ packet stream.
 
 The ISAC publisher sends one complete binary frame per ZeroMQ message.  This

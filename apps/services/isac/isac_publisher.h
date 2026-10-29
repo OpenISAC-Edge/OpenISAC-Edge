@@ -1,6 +1,3 @@
-// SPDX-FileCopyrightText: Copyright (C) 2026 OCUDU ISAC fork contributors
-// SPDX-License-Identifier: BSD-3-Clause-Open-MPI
-
 #pragma once
 
 #include "apps/services/isac/isac_frame.h"

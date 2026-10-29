@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: Copyright (C) 2026 OCUDU ISAC fork contributors
-# SPDX-License-Identifier: BSD-3-Clause-Open-MPI
 """
 GNURadio Embedded Python Block for the OCUDU ISAC ZMQ tap.
 

@@ -1,6 +1,3 @@
-// SPDX-FileCopyrightText: Copyright (C) 2026 OCUDU ISAC fork contributors
-// SPDX-License-Identifier: BSD-3-Clause-Open-MPI
-
 #include "apps/services/isac/isac_zmq_sink.h"
 #include "ocudu/adt/bounded_bitset.h"
 #include "ocudu/adt/span.h"

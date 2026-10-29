@@ -1,6 +1,3 @@
-# SPDX-FileCopyrightText: Copyright (C) 2026 OCUDU ISAC fork contributors
-# SPDX-License-Identifier: BSD-3-Clause-Open-MPI
-
 add_library(ocudu_isac STATIC
         isac_publisher.cpp
         isac_zmq_sink.cpp)
